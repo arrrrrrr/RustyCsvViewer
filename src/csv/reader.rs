@@ -280,14 +280,14 @@ mod tests {
     }
 
     fn teardown_from_file(target: &str) -> io::Result<()> {
-         std::fs::remove_file( Path::new(target))?;
+        std::fs::remove_file( Path::new(target))?;
         Ok(())
     }
 
     #[test]
     fn test_csvdata_cols_rows_len() {
         let data = vec![String::from("a"), String::from("b"), String::from("c")];
-        let c = CsvData { header: vec![], data: data, dims: (3,1)};
+        let c = CsvData { header: vec![], data, dims: (3,1)};
 
         assert_eq!(c.columns(), 3);
         assert_eq!(c.rows(), 1);
@@ -906,7 +906,6 @@ mod tests {
         let dims_expected = (3, 5);
 
         let f = String::from("csv_data_valid.csv");
-
         setup_from_file(&f, &s).expect("setup_from_file failed");
 
         let r = from_file(&f, true).expect("file read error")
@@ -935,7 +934,6 @@ mod tests {
         setup_from_file(&f, &s).expect("setup_from_file failed");
 
         let r = from_file(&f, true).expect("file read error");
-
         let e = CsvValidationError::QuoteValidationError {
             subtype: CsvQuoteValidationError::InvalidQuoteError,
             row: 5,
