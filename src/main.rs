@@ -1,8 +1,8 @@
 mod csv;
-use csv::csv_loader;
+use csv::reader;
 
 fn main() {
-    let csv_contents = csv_loader::from_file("test.csv", false);
+    let csv_contents = reader::from_file("test.csv", false);
 
     println!("{:?}", csv_contents.unwrap().unwrap())
 }
