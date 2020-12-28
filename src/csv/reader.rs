@@ -122,94 +122,76 @@ pub fn from_file(filename: &str, header: bool) -> io::Result<CsvResult<CsvData>>
 
 fn parse_csv(buffer: &str, header: bool) -> CsvResult<CsvData> {
     let mut csv_data = CsvData::new();
-    let mut row_data: Vec<Vec<String>> = Vec::new();
     let mut v: Vec<String> = Vec::new();
 
-    let mut header_processed = false;
     let mut inside_quote = false;
     let mut current_field = String::new();
     let mut num_fields: usize = 0;
-    let mut buffer_pos: usize = 0;
-    let mut row_id= 0;
-    let buffer_len: usize = buffer.len();
+    let mut prev_num_fields: usize = 0;
+    let mut row_count= 0;
+    let mut prev_char = '\0';
 
-    for mut c in buffer.chars() {
-        buffer_pos += 1;
-
-        if c != '\n' && c != '\r' {
-            if inside_quote || c != ',' {
-                current_field.push(c);
-            }
+    for c in buffer.chars().filter(|x| x != &'\r')
+                        .chain(std::iter::repeat('\n').take(1)) {
+        if c == prev_char && c == '\n' {
+            continue;
+        }
+        if (c != '\n' && c != ',') || (inside_quote && c == ',') {
+            current_field.push(c);
         }
 
         // change state if the character is a quote
         inside_quote = if c == '"' { !inside_quote } else { inside_quote };
-
-        // handle the case where there is no terminating newline
-        if buffer_pos == buffer_len {
-            c = '\n';
-        }
-
         // only process a field or row when not inside a set of outer quotes
         if !inside_quote {
             // process the field. field either terminates in a comma or newline
-            if c == ',' || c == '\n' {
-                match validate_field(&current_field) {
-                    Err(e) => {
-                        return Err(CsvValidationError::QuoteValidationError {
-                            subtype: e,
-                            row: row_id + 1,
-                            col: (v.len() + 1) as i32,
-                            value: current_field
-                        });
-                    },
-                    Ok(_) => {
-                        if row_id == 0 {
-                            num_fields += 1;
-                        }
-                        v.push(finalize_field(&current_field));
-                        current_field = String::new();
-                    }
-                };
-            }
-
-            // process the row. row ends in a newline
-            if c == '\n' {
-                if num_fields != v.len() {
-                    return Err(CsvValidationError::RowFieldCountMismatchError {
-                        row: row_id + 1,
-                        expected: num_fields,
-                        found: v.len()
+            if (c == '\n' && current_field.len() > 0) || c == ',' {
+                if let Err(e) = validate_field(&current_field) {
+                    return Err(CsvValidationError::QuoteValidationError {
+                        subtype: e, row: row_count+1, col: (v.len()+1) as i32, value: current_field
                     });
                 }
 
-                if header && !header_processed {
-                    csv_data.set_header(&mut v);
-                    header_processed = true;
-                } else {
-                    row_data.push(v);
+                v.push(finalize_field(&current_field));
+                current_field.clear();
+                num_fields += 1;
+            }
+
+            // process the row. row ends in a newline
+            if c == '\n' && v.len() > 0 {
+                if prev_num_fields > 0 && num_fields != prev_num_fields {
+                    return Err(CsvValidationError::RowFieldCountMismatchError {
+                        row: row_count+1, expected: prev_num_fields, found: num_fields
+                    });
                 }
 
-                v = Vec::new();
-                row_id += 1;
+                prev_num_fields = num_fields;
+                num_fields = 0;
+
+                if header && !csv_data.has_headers() {
+                    csv_data.set_header(&mut v);
+                } else {
+                    csv_data.set_data(&mut v);
+                    row_count += 1;
+                }
             }
         }
+
+        prev_char = c;
     }
 
     // the parser might have not matched a set of quotes
     if inside_quote {
         return Err(CsvValidationError::QuoteValidationError {
             subtype: CsvQuoteValidationError::UnterminatedQuoteError,
-            row: row_id + 1,
-            col: (v.len() as i32) + 1,
-            value: current_field
+            row: row_count+1, col: (v.len()+1) as i32, value: current_field
         });
     }
 
     // set the dimensions
-    csv_data.set_dims(num_fields, row_data.len());
-    // update the data field
-    csv_data.set_data(&mut row_data.into_iter().flatten().collect::<Vec<String>>());
+    csv_data.set_dims(prev_num_fields, row_count as usize);
+    // // update the data field
+    // csv_data.set_data(&mut row_data.into_iter().flatten().collect::<Vec<String>>());
 
     Ok(csv_data)
 }
@@ -217,19 +199,17 @@ fn parse_csv(buffer: &str, header: bool) -> CsvResult<CsvData> {
 fn validate_field(field: &str) -> Result<bool, CsvQuoteValidationError> {
     let has_outer_quotes = has_outer_quotes(&field);
     // extract the quote indices skipping the outer quotes
-    let indices: Vec<usize> = field.chars().enumerate()
+    let indices= field.chars().enumerate()
                                 .filter(|(i,v)|
                                     { *v == '"' && (*i > 0 && *i < field.len()-1) })
-                                .map(|(i,_)| i).collect();
+                                .map(|(i,_)| i).collect::<Vec<_>>();
     // number of quotes must be even
     if indices.len() % 2 > 0 {
         return Err(CsvQuoteValidationError::InvalidQuoteError);
     }
-    // iterate over the indices as tuples of successive values - (0,1), (1,2), ...
-    let iter = indices.iter().step_by(2).zip(indices.iter().skip(1).step_by(2));
 
-    for (i,j) in iter {
-        if j - i > 1 {
+    for v in indices.chunks(2) {
+        if v[1] - v[0] > 1 {
             return Err(CsvQuoteValidationError::InvalidQuoteError);
         }
         else if !has_outer_quotes {
@@ -681,7 +661,7 @@ mod tests {
     fn test_parse_csv_header_data_invalid_row_lengths() {
         let s = "Name,Type,Value\nvalue1,string";
         let r = parse_csv(&s, true);
-        let e = CsvValidationError::RowFieldCountMismatchError { row: 2, expected: 3, found: 2};
+        let e = CsvValidationError::RowFieldCountMismatchError { row: 1, expected: 3, found: 2};
 
         assert_eq!(r.err().unwrap(), e);
     }
@@ -690,7 +670,7 @@ mod tests {
     fn test_parse_csv_header_data_invalid_row_lengths2() {
         let s = "Name,Type,Value\nvalue1,string\nvalue2,int,30";
         let r = parse_csv(&s, true);
-        let e = CsvValidationError::RowFieldCountMismatchError { row: 2, expected: 3, found: 2};
+        let e = CsvValidationError::RowFieldCountMismatchError { row: 1, expected: 3, found: 2};
 
         assert_eq!(r.err().unwrap(), e);
     }
@@ -699,7 +679,7 @@ mod tests {
     fn test_parse_csv_header_data_invalid_row_lengths3() {
         let s = "Name,Type\nvalue1,string,abc";
         let r = parse_csv(&s, true);
-        let e = CsvValidationError::RowFieldCountMismatchError { row: 2, expected: 2, found: 3};
+        let e = CsvValidationError::RowFieldCountMismatchError { row: 1, expected: 2, found: 3};
 
         assert_eq!(r.err().unwrap(), e);
     }
@@ -711,7 +691,7 @@ mod tests {
 
         let e = CsvValidationError::QuoteValidationError {
             subtype: CsvQuoteValidationError::InvalidEscapeError,
-            row: 2, col: 3, value: String::from("a\"\"bc") };
+            row: 1, col: 3, value: String::from("a\"\"bc") };
 
         assert_eq!(r.err().unwrap(), e);
     }
@@ -723,7 +703,7 @@ mod tests {
 
         let e = CsvValidationError::QuoteValidationError {
             subtype: CsvQuoteValidationError::UnterminatedQuoteError,
-            row: 2, col: 3, value: String::from("\"a\"bc\"") };
+            row: 1, col: 3, value: String::from("\"a\"bc\"") };
 
         assert_eq!(r.err().unwrap(), e);
     }
@@ -735,7 +715,7 @@ mod tests {
 
         let e = CsvValidationError::QuoteValidationError {
             subtype: CsvQuoteValidationError::UnterminatedQuoteError,
-            row: 2, col: 1, value: String::from("\"value1,string,abc") };
+            row: 1, col: 1, value: String::from("\"value1,string,abc") };
 
         assert_eq!(r.err().unwrap(), e);
     }
@@ -746,7 +726,7 @@ mod tests {
         let r = parse_csv(&s, true);
 
         let m =
-            "At row 2. Unterminated outer quote error \
+            "At row 1. Unterminated outer quote error \
             in column: 1, value: \"value1,string,abc";
 
         assert_eq!(r.err().map(|e| format!("{}",e)).unwrap(), m);
@@ -804,7 +784,7 @@ mod tests {
         let r = from_file(&f, true).expect("file read error");
         let e = CsvValidationError::QuoteValidationError {
             subtype: CsvQuoteValidationError::InvalidQuoteError,
-            row: 5,
+            row: 4,
             col: 1,
             value: "\"value4,\"a value".to_owned()
         };
