@@ -1,3 +1,3 @@
 pub mod app;
-pub mod resource;
 mod app_ui;
+mod resource;

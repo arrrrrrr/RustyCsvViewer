@@ -1,115 +1,10 @@
-use std::io;
-use std::io::Read;
-use std::fs::File;
 use std::vec::Vec;
-use std::fmt;
-use std::cmp::min;
+use std::io::{self,Read};
+use std::fs::File;
 
-#[derive(Debug)]
-pub struct CsvData {
-    header: Vec<String>,
-    data: Vec<String>,
-    dims: (usize, usize),
-}
-
-impl CsvData {
-    pub fn new() -> Self {
-        CsvData {
-            header: Vec::new(),
-            data: Vec::new(),
-            dims: (0, 0),
-        }
-    }
-
-    pub fn has_headers(&self) -> bool {
-        self.header.len() > 0
-    }
-
-    pub fn has_data(&self) -> bool {
-        self.data.len() > 0
-    }
-
-    pub fn len(&self) -> usize {
-        self.columns() * self.rows()
-    }
-
-    pub fn columns(&self) -> usize {
-        self.dims.0
-    }
-
-    pub fn rows(&self) -> usize {
-        self.dims.1
-    }
-
-    pub fn get_headers(&self) -> &Vec<String> {
-        &self.header
-    }
-
-    pub fn get_data(&self) -> &Vec<String> {
-        &self.data
-    }
-
-    pub fn set_dims(&mut self, cols: usize, rows: usize) {
-        self.dims = (cols, rows)
-    }
-
-    pub fn set_header(&mut self, header: &mut Vec<String>) {
-        self.header.append(header)
-    }
-
-    pub fn set_data(&mut self, data: &mut Vec<String>) {
-        self.data.append(data)
-    }
-}
+use crate::csv::*;
 
 type CsvResult<T> = Result<T,CsvValidationError>;
-
-#[derive(Debug,PartialEq)]
-pub enum CsvQuoteValidationError {
-    InvalidQuoteError,
-    InvalidEscapeError,
-    UnterminatedQuoteError,
-}
-
-impl fmt::Display for CsvQuoteValidationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *&self {
-            CsvQuoteValidationError::InvalidQuoteError =>
-                write!(f, "Unbalanced quote error"),
-
-            CsvQuoteValidationError::InvalidEscapeError =>
-                write!(f, "Unquoted field with escaped quote error"),
-
-            CsvQuoteValidationError::UnterminatedQuoteError =>
-                write!(f, "Unterminated outer quote error"),
-        }
-    }
-}
-
-#[derive(Debug,PartialEq)]
-pub enum CsvValidationError {
-    QuoteValidationError { subtype: CsvQuoteValidationError, row: i32, col: i32, value: String },
-    RowFieldCountMismatchError { row: i32, expected: usize, found: usize },
-}
-
-impl fmt::Display for CsvValidationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *&self {
-            CsvValidationError::QuoteValidationError {
-                subtype, row, col, value } =>
-                {
-                    let max_value_len = min(64, value.len());
-                    write!(f, "At row {}. {} in column: {}, value: {}",
-                           row, subtype, col, &value[0..max_value_len])
-                }
-
-            CsvValidationError::RowFieldCountMismatchError {
-                row, expected, found } =>
-                write!(f, "At row {}. Field count mismatch. Expected: {}, Found: {}",
-                        row, expected, found),
-        }
-    }
-}
 
 pub fn from_file(filename: &str, header: bool) -> io::Result<CsvResult<CsvData>> {
     let mut f = File::open(filename)?;
@@ -171,7 +66,7 @@ fn parse_csv(buffer: &str, header: bool) -> CsvResult<CsvData> {
                 if header && !csv_data.has_headers() {
                     csv_data.set_header(&mut v);
                 } else {
-                    csv_data.set_data(&mut v);
+                    csv_data.set_data(&mut v, prev_num_fields);
                     row_count += 1;
                 }
             }
@@ -187,11 +82,6 @@ fn parse_csv(buffer: &str, header: bool) -> CsvResult<CsvData> {
             row: row_count+1, col: (v.len()+1) as i32, value: current_field
         });
     }
-
-    // set the dimensions
-    csv_data.set_dims(prev_num_fields, row_count as usize);
-    // // update the data field
-    // csv_data.set_data(&mut row_data.into_iter().flatten().collect::<Vec<String>>());
 
     Ok(csv_data)
 }
@@ -238,38 +128,15 @@ fn has_outer_quotes(field: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
     use std::io;
     use std::path::Path;
-
-    // helpers for testing from_file(...)
-    fn setup_from_file(target: &str, data: &str) -> io::Result<()> {
-        let mut f = File::create(target)?;
-        f.write_all(data.as_bytes())?;
-        Ok(())
-    }
-
-    fn teardown_from_file(target: &str) -> io::Result<()> {
-        std::fs::remove_file( Path::new(target))?;
-        Ok(())
-    }
+    use std::io::Write;
+    use std::fs;
 
     macro_rules! make_strvec {
         [ $($a:expr),+ ] => {
             vec![ $($a.to_owned()),+ ]
         }
-    }
-
-    #[test]
-    fn test_csvdata_cols_rows_len() {
-        let data = make_strvec![ "a", "b", "c" ];
-        let c = CsvData { header: vec![], data, dims: (3,1)};
-
-        assert_eq!(c.columns(), 3);
-        assert_eq!(c.rows(), 1);
-        assert_eq!(c.len(), 3);
-        assert_eq!(c.has_headers(), false);
-        assert_eq!(c.has_data(), true);
     }
 
     // tests
@@ -732,6 +599,18 @@ mod tests {
         assert_eq!(r.err().map(|e| format!("{}",e)).unwrap(), m);
     }
 
+    // helpers for testing from_file(...)
+    fn setup_from_file(target: &str, data: &str) -> io::Result<()> {
+        let mut f = File::create(target)?;
+        f.write_all(data.as_bytes())?;
+        Ok(())
+    }
+
+    fn teardown_from_file(target: &str) -> io::Result<()> {
+        fs::remove_file(Path::new(target))?;
+        Ok(())
+    }
+
     #[test]
     fn test_from_file_valid_data() {
         let s =
@@ -760,9 +639,10 @@ mod tests {
         let r = from_file(&f, true).expect("file read error")
             .expect("parse error");
 
-        assert_eq!(r.header, header_expected);
-        assert_eq!(r.data, data_expected);
-        assert_eq!(r.dims, dims_expected);
+        assert_eq!(r.get_headers(), &header_expected);
+        assert_eq!(r.get_data(), &data_expected);
+        assert_eq!(r.columns(), dims_expected.0);
+        assert_eq!(r.rows(), dims_expected.1);
 
         teardown_from_file(&f).expect("teardown_from_file failed");
     }
@@ -771,12 +651,12 @@ mod tests {
     fn test_from_file_invalid_data() {
         let s =
             "Name,Value,Type\n\
-            value1,10,int\n\
-            value2,20,int\n\
-            value3,40.5,float\n\
-            \"val\n\
-            ue4,\"a value, is it not?\",string\n\
-            value5,\"this is a \"\"quoted\"\" word\",string";
+                value1,10,int\n\
+                value2,20,int\n\
+                value3,40.5,float\n\
+                \"val\n\
+                ue4,\"a value, is it not?\",string\n\
+                value5,\"this is a \"\"quoted\"\" word\",string";
 
         let f = "csv_data_invalid.csv";
         setup_from_file(&f, &s).expect("setup_from_file failed");
