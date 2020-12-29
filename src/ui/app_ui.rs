@@ -16,11 +16,24 @@ impl nwg::NativeUi<AppUi> for App {
 
         // Controls
         nwg::Window::builder()
-            .flags(nwg::WindowFlags::WINDOW | nwg::WindowFlags::VISIBLE)
+            .flags(nwg::WindowFlags::MAIN_WINDOW |
+                   nwg::WindowFlags::VISIBLE)
             .size((400,200))
             .position((300,300))
             .title(resource::APP_TITLE)
             .build(&mut data.window)?;
+
+        // Dialogs
+        nwg::FileDialog::builder()
+            .title(resource::APP_OPEN_FILE_DLG)
+            .action(nwg::FileDialogAction::Open)
+            .default_folder(&data.default_folder)
+            .filters(resource::APP_OPEN_FILE_DLG_FILTER)
+            .build(&mut data.file_dialog)?;
+
+        // nwg::MenuItem::builder()
+        //     .parent(&data.window)
+        //     .build()?;
 
         let ui = AppUi {
             inner: Rc::new(data),
@@ -34,7 +47,7 @@ impl nwg::NativeUi<AppUi> for App {
                 match evt {
                     E::OnWindowClose => {
                         if &handle == &ui.window {
-                            // handle any cleanup on close here
+                            &ui.on_window_close();
                         }
                     },
                     _ => {}
@@ -51,7 +64,7 @@ impl nwg::NativeUi<AppUi> for App {
 
 impl Drop for AppUi {
     fn drop(&mut self) {
-        /// To make sure that everything is freed without issues, the default handler must be unbound.
+        // To make sure that everything is freed without issues, the default handler must be unbound.
         let handler = self.default_handler.borrow();
         if handler.is_some() {
             nwg::unbind_event_handler(handler.as_ref().unwrap());
