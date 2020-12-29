@@ -36,6 +36,7 @@ name = "rusty_csv_viewer"
 version = "0.1.0"
 dependencies = [
  "native-windows-gui",
+ "winapi",
 ]
 
 [[package]]

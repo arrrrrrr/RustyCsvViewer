@@ -1,8 +1,12 @@
-mod csv;
-use csv::reader;
+mod ui;
+
+use nwg::NativeUi;
+use ui::app::App;
 
 fn main() {
-    let csv_contents = reader::from_file("test.csv", false);
+    nwg::init().expect("Failed to initialize window");
+    nwg::Font::set_global_family("Segoe UI").expect("Failed to set default font");
 
-    println!("{:?}", csv_contents.unwrap().unwrap())
+    let _ui = App::build_ui(Default::default()).expect("Failed to create UI");
+    nwg::dispatch_thread_events();
 }

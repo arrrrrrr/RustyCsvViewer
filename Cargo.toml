@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 nwg = {version = "^1.0.7", package = "native-windows-gui"}
+winapi = {version = "0.3"}
