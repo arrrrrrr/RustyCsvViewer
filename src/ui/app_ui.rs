@@ -18,8 +18,8 @@ impl nwg::NativeUi<AppUi> for App {
         nwg::Window::builder()
             .flags(nwg::WindowFlags::MAIN_WINDOW |
                    nwg::WindowFlags::VISIBLE)
-            .size((400,200))
-            .position((300,300))
+            .size((data.state.window_dims.x, data.state.window_dims.y))
+            .position((data.state.window_pos.x, data.state.window_pos.y))
             .title(resource::APP_TITLE)
             .build(&mut data.window)?;
 
@@ -27,7 +27,6 @@ impl nwg::NativeUi<AppUi> for App {
         nwg::FileDialog::builder()
             .title(resource::APP_OPEN_FILE_DLG)
             .action(nwg::FileDialogAction::Open)
-            .default_folder(&data.default_folder)
             .filters(resource::APP_OPEN_FILE_DLG_FILTER)
             .build(&mut data.file_dialog)?;
 

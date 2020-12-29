@@ -1,6 +1,7 @@
-use std::{env};
-use std::path::{Path};
+use std::path::{PathBuf};
 
+use crate::settings::AppSettings;
+use crate::utils;
 use crate::csv::*;
 
 #[derive(Default)]
@@ -11,6 +12,7 @@ pub struct App {
     pub default_folder: String,
     pub layout_params: Option<LayoutParams>,
     pub menu: nwg::Menu,
+    pub state: AppSettings,
 }
 
 pub struct LayoutParams {
@@ -20,20 +22,22 @@ pub struct LayoutParams {
 }
 
 impl App {
-    pub fn new() -> Self {
-        let mut _currdir = String::from(".");
-
-        if let Some(currdir) = env::current_dir().unwrap().parent().unwrap().to_str() {
-            _currdir = currdir.to_owned();
-        }
-
+    pub fn new(state: AppSettings) -> Self {
         App {
-            default_folder: _currdir,
+            state,
+            // TODO: might fail if UCS2 sequence cannot be converted to UTF8
+            default_folder: utils::get_cwd_as_str(),
             ..Default::default()
         }
     }
 
     pub fn on_window_close(&self) {
+        // TODO: this isn't ideal but its ok for now
+        if let Err(e) =  self.state.save() {
+            eprintln!("{}", e);
+        }
+
+        // Terminate message loop and unblock the main thread
         nwg::stop_thread_dispatch();
     }
 
@@ -57,17 +61,24 @@ impl App {
 
         // Run the file picker dialog and select a file
         if self.file_dialog.run(Some(&self.window)) {
-            if let Ok(filepath) = self.file_dialog.get_selected_item() {
-                // update the default folder
-                if let Some(p) = Path::new(&filepath).parent().unwrap().to_str() {
-                    self.default_folder = p.to_owned();
-                }
+            match self.file_dialog.get_selected_item() {
+                Ok(filepath) => {
+                    // update the default folder
+                    if let Some(p) = PathBuf::from(&filepath).parent() {
+                        self.default_folder = p.to_string_lossy().to_string();
+                    }
 
-                selected_file.push_str(&filepath);
+                    selected_file.push_str(&filepath);
+                },
+                Err(e) => {
+                    let msg_ = format!("{}", e);
+                    nwg::error_message("Open File", &msg_);
+                    return;
+                }
             }
         }
 
-        println!("Picked file: {}", selected_file);
+        eprintln!("Selected file: {}", selected_file);
 
         if let Some(data) = self.read_file(&selected_file) {
             let l = self.prepare_layout(data);
@@ -77,16 +88,16 @@ impl App {
 
     // Execute the close file command
     pub fn cmd_close_file(&mut self) {
-
+        unimplemented!()
     }
 
     pub fn cmd_exit() {
-
+        unimplemented!()
     }
 
     // Execute the about command
     pub fn cmd_about(&self) {
-
+        unimplemented!()
     }
 
     // Read the file contents into a CsvData structure or display a message box on error
@@ -127,7 +138,9 @@ impl App {
 
     **/
     fn prepare_layout(&self, data: CsvData) -> LayoutParams {
-        LayoutParams { data, col_widths: vec![], row_height: 1 }
+        //LayoutParams { data, col_widths: vec![], row_height: 1 }
+        unimplemented!()
     }
+
 }
 
