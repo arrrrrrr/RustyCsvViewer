@@ -1,31 +1,67 @@
-use std::error::Error;
+//! The settings module is used to load and store UI geometry values and well
+//! as other state that should persist between sessions
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
+use std::fmt;
 use serde::{Deserialize,Serialize};
 
-#[derive(Debug,Deserialize,Serialize,PartialEq)]
-pub struct Coord<T> {
-    pub x: T,
-    pub y: T,
+use crate::utils::geometry::Coord;
+
+macro_rules! make_error {
+    { $t:ident, $e:expr } => {
+        Err(AppSettingsError::$t(format!("Info: {:?}", $e).to_owned()))
+    }
 }
 
-#[derive(Debug,Deserialize,Serialize,PartialEq)]
-pub struct AppSettings {
-    window_pos: Coord<u32>,
-    window_dims: Coord<u32>,
-    recent_files: Vec<String>,
+/// Generic JSON and IO error types that can occur when interacting with the settings store
+#[derive(Debug,PartialEq)]
+pub enum AppSettingsError {
+    IOError(String),
+    SerializationError(String),
+    DeserializationError(String),
 }
 
+/// Implement custom error messages
+impl fmt::Display for AppSettingsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result<> {
+        match self {
+            AppSettingsError::IOError(s) => {
+                write!(f, "Unable to open settings or IO error. {}", s)
+            },
+            AppSettingsError::SerializationError(s) => {
+                write!(f, "JSON serialization error writing settings. {}", s)
+            },
+            AppSettingsError::DeserializationError(s) => {
+                write!(f, "JSON deserialization error reading settings. {}", s)
+            }
+        }
+    }
+}
+
+/// Default values for the AppSetting structure
 pub struct CAppSettings {}
 
 impl CAppSettings {
-    pub const DEF_WINDOW_POS: Coord<u32> = Coord { x: 300, y: 300 };
-    pub const DEF_WINDOW_DIMS: Coord<u32> = Coord { x: 400, y: 300 };
+    pub const DEF_WINDOW_POS: Coord<i32> = Coord { x: 300, y: 300 };
+    pub const DEF_WINDOW_DIMS: Coord<i32> = Coord { x: 400, y: 300 };
     pub const DEF_CFG_PATH: &'static str = "settings.json";
 }
 
+/// Structure to store persistent UI state between sessions
+#[derive(Debug,Deserialize,Serialize,PartialEq,Default)]
+pub struct AppSettings {
+    /// Window position relative to (0,0) at top left
+    pub window_pos: Coord<i32>,
+    /// window dimensions
+    pub window_dims: Coord<i32>,
+    /// list of recently open file paths
+    pub recent_files: Vec<String>,
+}
+
+/// Implementation for AppSettings class
 impl AppSettings {
+    /// Construct AppSettings with default values
     fn new() -> Self {
         AppSettings {
             window_pos: CAppSettings::DEF_WINDOW_POS,
@@ -34,28 +70,47 @@ impl AppSettings {
         }
     }
 
-    pub fn load() -> Result<AppSettings,Box<dyn Error>> {
-        // If the config file has not yet been written, it will be saved during cleanup
-        if !Path::new(CAppSettings::DEF_CFG_PATH).exists() {
-            return Ok(AppSettings::new());
+    /// Attempt to load the settings from settings.json or otherwise return default values
+    pub fn load() -> Result<AppSettings,AppSettingsError> {
+        let mut app_settings = AppSettings::new();
+
+        if let Ok(f) = File::open(CAppSettings::DEF_CFG_PATH) {
+            let br = BufReader::new(f);
+            let settings = serde_json::from_reader(br);
+
+            if let Err(e) = settings {
+                return make_error!(DeserializationError, e.to_string());
+            }
+
+            app_settings = settings.unwrap();
+        }
+        else {
+            eprintln!("Warning: AppSettings::load() error. File::open failed");
         }
 
-        let f = File::open(CAppSettings::DEF_CFG_PATH)?;
-        let br = BufReader::new(f);
-
-        // deserialize the json into the AppSettings struct
-        let settings = serde_json::from_reader(br)?;
-        Ok(settings)
+        Ok(app_settings)
     }
 
-    pub fn save(&self) -> Result<(),Box<dyn Error>> {
-        let f = File::create(CAppSettings::DEF_CFG_PATH)?;
-        let bw = BufWriter::new(f);
+    /// Save the settings into the settings file
+    /// which by default is the same directory as the executable
+    pub fn save(&self) -> Result<(),AppSettingsError> {
+        // TODO: This is intended to be called on exit.
+        //       Panic would potentially leave things inconsistent, but is it ok to ignore errors?
+        match File::create(CAppSettings::DEF_CFG_PATH) {
+            Ok(mut _f) => {
+                let bw = BufWriter::new(_f);
+                let r = serde_json::to_writer_pretty(bw, &self);
 
-        // serialize the AppSettings struct into json
-        serde_json::to_writer_pretty(bw, &self)?;
+                if let Err(e) = r {
+                    return make_error!(SerializationError, e.to_string());
+                }
 
-        Ok(())
+                Ok(())
+            },
+            Err(e) => {
+                return make_error!(IOError, e.to_string());
+            }
+        }
     }
 }
 
@@ -80,10 +135,10 @@ mod tests {
             ]
         };
 
-        let r = serde_json::to_string(&settings).unwrap();
-        let expected_settings: AppSettings = serde_json::from_str(&r).unwrap();
+        let r = serde_json::to_string(&settings).expect("serialization error");
+        let expected_settings: AppSettings = serde_json::from_str(&r).expect("deserialization error");
+
         assert_eq!(&settings, &expected_settings);
-        println!("{}", r);
     }
 
     #[test]
@@ -111,38 +166,44 @@ mod tests {
             ]
         };
 
-        let r: AppSettings = serde_json::from_str(s).unwrap();
+        let r: AppSettings = serde_json::from_str(s)
+            .expect("deserialization error during settings read");
+
         assert_eq!(r, expected);
     }
 
     #[test]
     fn test_load_settings_no_settings_file() {
-        let r = AppSettings::load().unwrap();
         let expected = AppSettings {
             window_pos: CAppSettings::DEF_WINDOW_POS,
             window_dims: CAppSettings::DEF_WINDOW_DIMS,
             recent_files: vec![],
         };
 
-        assert_eq!(r, expected);
+        match AppSettings::load() {
+            Ok(r) => assert_eq!(r, expected),
+            Err(e) => panic!("{:?}", e)
+        }
     }
 
     fn setup_create_settings_file() {
-        let f = File::create(Path::new(CAppSettings::DEF_CFG_PATH)).unwrap();
-        let bw = BufWriter::new(f);
-
-        let r = AppSettings {
+        let s = AppSettings {
             window_pos: Coord { x: 0, y: 2000 },
             window_dims: Coord { x: 1000, y: 1000 },
             recent_files: make_strvec![ "X:\\secrets.csv" ],
         };
 
-        serde_json::to_writer(bw, &r).unwrap();
+        let f = File::create(Path::new(CAppSettings::DEF_CFG_PATH))
+            .expect("failed to open file for write");
+        let bw = BufWriter::new(f);
+
+        serde_json::to_writer(bw, &s)
+            .expect("serialization error during settings write");
     }
 
     fn teardown_remove_settings_file() {
         let p = Path::new(CAppSettings::DEF_CFG_PATH);
-        let f = std::fs::remove_file(p).unwrap();
+        std::fs::remove_file(p).expect("failed to delete settings file");
     }
 
     #[test]
@@ -160,8 +221,8 @@ mod tests {
 
         r.save().expect("saving failed");
 
-        let mut f = File::open(CAppSettings::DEF_CFG_PATH).expect("open settings failed");
-        let mut br = BufReader::new(f);
+        let f = File::open(CAppSettings::DEF_CFG_PATH).expect("open settings failed");
+        let br = BufReader::new(f);
 
         let r2: AppSettings = serde_json::from_reader(br).expect("deserializing failed");
         let expected = AppSettings {
