@@ -19,6 +19,35 @@ impl CsvData {
         }
     }
 
+    fn set_dims(&mut self, cols: usize, rows: usize) {
+        self.dims = (cols, rows)
+    }
+
+    pub fn set_header(&mut self, header: &mut Vec<String>) {
+        if (self.columns() > 0 && header.len() == self.columns()) ||
+            self.columns() == 0
+        {
+            self.header.clear();
+            self.header.append(header);
+            self.set_dims(self.header.len(), self.rows());
+
+            return;
+        }
+
+        panic!("CsvData: column mismatch when attempting to update the header field")
+    }
+
+    pub fn set_data(&mut self, data: &mut Vec<String>, cols: usize) {
+        if (self.columns() > 0 && cols == self.columns()) || self.columns() == 0
+        {
+            self.data.append(data);
+            self.set_dims(cols, self.data.len() / cols);
+            return;
+        }
+
+        panic!("CsvData: column mismatch when attempting to update the data field")
+    }
+
     pub fn has_headers(&self) -> bool {
         self.header.len() > 0
     }
@@ -46,47 +75,25 @@ impl CsvData {
     pub fn get_data(&self) -> &Vec<String> {
         &self.data
     }
-
-    pub fn set_dims(&mut self, cols: usize, rows: usize) {
-        self.dims = (cols, rows)
-    }
-
-    pub fn set_header(&mut self, header: &mut Vec<String>) {
-        if self.has_data() && header.len() == self.dims.0 {
-            self.header.clear();
-            self.header.append(header);
-            return;
-        }
-
-        panic!("CsvData: column mismatch when attempting to update the header field")
-    }
-
-    pub fn set_data(&mut self, data: &mut Vec<String>, cols: usize) {
-        if self.columns() > 0 && cols == self.columns() {
-            self.data.append(data);
-            self.set_dims(cols, self.data.len() / cols);
-            return;
-        }
-
-        panic!("CsvData: column mismatch when attempting to update the data field")
-    }
 }
 
+/// Csv validation error sub-types
+/// InvalidEscapeError
 #[derive(Debug,PartialEq)]
 pub enum CsvQuoteValidationError {
-    InvalidQuoteError,
     InvalidEscapeError,
+    InvalidQuoteError,
     UnterminatedQuoteError,
 }
 
 impl fmt::Display for CsvQuoteValidationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *&self {
-            CsvQuoteValidationError::InvalidQuoteError =>
-                write!(f, "Unbalanced quote error"),
-
             CsvQuoteValidationError::InvalidEscapeError =>
                 write!(f, "Unquoted field with escaped quote error"),
+
+            CsvQuoteValidationError::InvalidQuoteError =>
+                write!(f, "Unbalanced quote error"),
 
             CsvQuoteValidationError::UnterminatedQuoteError =>
                 write!(f, "Unterminated outer quote error"),
@@ -94,12 +101,24 @@ impl fmt::Display for CsvQuoteValidationError {
     }
 }
 
+/// Primary csv validation error types
 #[derive(Debug,PartialEq)]
 pub enum CsvValidationError {
-    QuoteValidationError { subtype: CsvQuoteValidationError, row: i32, col: i32, value: String },
-    RowFieldCountMismatchError { row: i32, expected: usize, found: usize },
+    QuoteValidationError {
+        subtype: CsvQuoteValidationError,
+        row: i32,
+        col: i32,
+        value: String
+    },
+    RowFieldCountMismatchError {
+        row: i32,
+        expected:
+        usize,
+        found: usize
+    },
 }
 
+/// Display trait for displaying Validation error messages
 impl fmt::Display for CsvValidationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *&self {
@@ -122,10 +141,6 @@ impl fmt::Display for CsvValidationError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io;
-    use std::path::Path;
-    use std::io::Write;
-    use std::fs;
 
     macro_rules! make_strvec {
         [ $($a:expr),+ ] => {
@@ -134,7 +149,7 @@ mod tests {
     }
 
     #[test]
-    fn test_csvdata_header_only() {
+    fn test_csv_data_header_only() {
         let mut hdr = make_strvec![ "Name", "Type", "Value" ];
         let mut c = CsvData::new();
         c.set_header(&mut hdr);
@@ -147,7 +162,7 @@ mod tests {
     }
 
     #[test]
-    fn test_csvdata_data_only() {
+    fn test_csv_data_data_only() {
         let mut data = make_strvec![ "Name", "Type", "Value" ];
         let mut c = CsvData::new();
         c.set_data(&mut data, 3);
@@ -160,7 +175,7 @@ mod tests {
     }
 
     #[test]
-    fn test_csvdata_header_and_data() {
+    fn test_csv_data_header_and_data() {
         let mut hdr = make_strvec![ "Name", "Type", "Value" ];
         let mut data = make_strvec![ "a", "b", "c" ];
         let mut c = CsvData::new();
