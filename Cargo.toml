@@ -8,4 +8,6 @@ edition = "2018"
 
 [dependencies]
 nwg = {version = "^1.0.7", package = "native-windows-gui"}
-winapi = {version = "0.3"}
+serde_json = {version = "^1"}
+serde = {version = "^1.0", features = ["derive"]}
+winapi = {version = "0.3", features = ["winuser"]}
