@@ -52,7 +52,7 @@ impl nwg::NativeUi<AppUi> for App {
 
                         if let Some(h) = ui.find_submenu_handle(LMENU_FILE::IS, LMENU_FILE::HAS[0]) {
                             if &handle == h {
-                                if let Some(f) = ui.cmd_open_file() {
+                                if let Some(f) = ui.cmd_open_file(&evt, &_evt_data) {
                                     println!("opened {}", f);
                                 }
                             }
@@ -61,19 +61,19 @@ impl nwg::NativeUi<AppUi> for App {
                             ui.find_submenu_handle(LMENU_FILE::IS, LMENU_FILE::HAS[1]).unwrap()
                         {
                             // close a file!
-                            ui.cmd_close_file();
+                            ui.cmd_close_file(&evt, &_evt_data);
                         }
                         else if &handle ==
                             ui.find_submenu_handle(LMENU_FILE::IS, LMENU_FILE::HAS[2]).unwrap()
                         {
                             // close a file!
-                            ui.cmd_exit();
+                            ui.cmd_exit(&evt, &_evt_data);
                         }
                         else if &handle ==
                             ui.find_submenu_handle(LMENU_EDIT::IS, LMENU_FILE::HAS[0]).unwrap()
                         {
                             // close a file!
-                            ui.cmd_find();
+                            ui.cmd_find(&evt, &_evt_data);
                         }
                         else if &handle ==
                             ui.find_submenu_handle(LMENU_EDIT::IS, LMENU_FILE::HAS[1]).unwrap()
@@ -85,7 +85,7 @@ impl nwg::NativeUi<AppUi> for App {
                             ui.find_submenu_handle(LMENU_HELP::IS, LMENU_FILE::HAS[0]).unwrap()
                         {
                             // close a file!
-                            ui.cmd_about();
+                            ui.cmd_about(&evt, &_evt_data);
                         }
                     }
                     _ => {}

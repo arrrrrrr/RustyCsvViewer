@@ -11,15 +11,8 @@ pub struct App {
     pub window: nwg::Window,
     pub layout: nwg::GridLayout,
     pub file_dialog: nwg::FileDialog,
-    pub layout_params: Option<LayoutParams>,
     pub state: AppSettings,
     pub menu: HashMap<String, CMenu>,
-}
-
-pub struct LayoutParams {
-    data: CsvData,
-    col_widths: Vec<usize>,
-    row_height: usize,
 }
 
 impl App {
@@ -52,7 +45,7 @@ impl App {
     **/
 
     // Execute the open file command
-    pub fn cmd_open_file(&self) -> Option<String> {
+    pub fn cmd_open_file(&self, event: &nwg::Event, event_data: &nwg::EventData) -> Option<String> {
         let selected = self.open_file_picker_dialog(&self.file_dialog);
 
         if selected.is_none() {
@@ -72,21 +65,21 @@ impl App {
     }
 
     // Execute the about command
-    pub fn cmd_about(&self) {
+    pub fn cmd_about(&self, event: &nwg::Event, event_data: &nwg::EventData) {
         eprintln!("cmd_about: showing about dialog");
     }
 
     // Execute the close file command
-    pub fn cmd_close_file(&self) {
+    pub fn cmd_close_file(&self, event: &nwg::Event, event_data: &nwg::EventData) {
         eprintln!("cmd_close_file: Closing open file");
     }
 
-    pub fn cmd_exit(&self) {
+    pub fn cmd_exit(&self, event: &nwg::Event, event_data: &nwg::EventData) {
         eprintln!("cmd_exit: exiting");
         self.on_window_close();
     }
 
-    pub fn cmd_find(&self) {
+    pub fn cmd_find(&self, event: &nwg::Event, event_data: &nwg::EventData) {
         eprintln!("cmd_find: showing find dialog");
     }
 
@@ -145,9 +138,8 @@ impl App {
             prompt the user to accept inferred types
 
     **/
-    fn prepare_layout(&self, data: CsvData) -> LayoutParams {
-        //LayoutParams { data, col_widths: vec![], row_height: 1 }
-        unimplemented!()
+    pub fn create_layout(&self) -> bool {
+        false
     }
 
     pub fn find_submenu_handle(&self, parent: &str, child: &str) ->
@@ -165,6 +157,25 @@ impl App {
 
         None
     }
+
+    // pub fn create_menu_command_list(&self)
+    //     -> HashMap<nwg::ControlHandle, fn(&Self)>
+    // {
+    //     use crate::ui::resource::{LMENU_FILE,LMENU_EDIT,LMENU_HELP};
+    //
+    //     let mut h = HashMap::<nwg::ControlHandle, fn(&App)>::new();
+    //
+    //     // Construct a command mapping for each menu command
+    //     for k in vec![LMENU_FILE::IS, LMENU_EDIT::IS, LMENU_HELP::IS] {
+    //         if let Some(container) = self.menu.get(k) {
+    //             if let Some(mitem) = container.get_submenu() {
+    //
+    //             }
+    //         }
+    //     }
+    //
+    //     h
+    // }
 
     /// create a file picker dialog for opening csv and text files
     pub fn create_file_picker_dialog(dialog: &mut nwg::FileDialog) -> Result<(),nwg::NwgError> {
@@ -197,17 +208,30 @@ impl App {
             submenu_vec
         );
 
-        bmb.add_menu(TMenu::Menu(LMENU_FILE::IS.to_owned(), false))
-            .add_submenu_item(TMenu::MenuItem(LMENU_FILE::HAS[0].to_owned(), false, false))
-            .add_submenu_item(TMenu::MenuItem(LMENU_FILE::HAS[1].to_owned(), true, false))
-            .add_submenu_item(TMenu::MenuItem(LMENU_FILE::HAS[2].to_owned(), false, false))
+        // Templates for the File menu
+        // File
+        //   |___ Open File
+        //   |___ Close File [Initially greyed out]
+        //   |___ Exit
+        //
+        let m_file = TMenu::Menu(LMENU_FILE::IS.to_owned(), false);
+        let m_file_open = TMenu::MenuItem(LMENU_FILE::HAS[0].to_owned(), false, false);
+        let m_file_close = TMenu::MenuItem(LMENU_FILE::HAS[1].to_owned(), true, false);
+        let m_file_exit = TMenu::MenuItem(LMENU_FILE::HAS[2].to_owned(), false, false);
+
+        bmb.add_menu(m_file)
+            .add_submenu_item(m_file_open)
+            .add_submenu_item(m_file_close)
+            .add_submenu_item(m_file_exit)
             .build(&mut file_cnt, parent)
             .map_err(|e| eprintln!("{:?}",e)).unwrap();
+
+        let def_menuitem = nwg::MenuItem::default();
 
         bmb = BulkMenuBuilder::new();
         submenu_vec =
             (0..LMENU_EDIT::HAS.len()).into_iter()
-                .map(|_| IMenu::from(nwg::MenuItem::default())).collect();
+                .map(|_| IMenu::from(&def_menuitem)).collect();
 
         let mut edit_cnt = CMenu::new(
             IMenu::from(nwg::Menu::default()),
@@ -215,9 +239,18 @@ impl App {
             submenu_vec
         );
 
-        bmb.add_menu(TMenu::Menu(LMENU_EDIT::IS.to_owned(), false))
-            .add_submenu_item(TMenu::MenuItem(LMENU_EDIT::HAS[0].to_owned(), false, false))
-            .add_submenu_item(TMenu::MenuItem(LMENU_EDIT::HAS[1].to_owned(), true, false))
+        // Templates for the Edit menu
+        // Edit
+        //   |___ Find         [Initially greyed out]
+        //   |___ Preferences
+        //
+        let m_edit = TMenu::Menu(LMENU_EDIT::IS.to_owned(), false);
+        let m_edit_find = TMenu::MenuItem(LMENU_EDIT::HAS[0].to_owned(), false, false);
+        let m_edit_pref = TMenu::MenuItem(LMENU_EDIT::HAS[1].to_owned(), true, false);
+
+        bmb.add_menu(m_edit)
+            .add_submenu_item(m_edit_find)
+            .add_submenu_item(m_edit_pref)
             .build(&mut edit_cnt, parent)
             .map_err(|e| eprintln!("{:?}",e)).unwrap();
 
@@ -232,8 +265,15 @@ impl App {
             submenu_vec
         );
 
-        bmb.add_menu(TMenu::Menu(LMENU_HELP::IS.to_owned(), false))
-            .add_submenu_item(TMenu::MenuItem(LMENU_HELP::HAS[0].to_owned(), false, false))
+        // Templates for the Help menu
+        // Help
+        //   |___ About
+        //
+        let m_help = TMenu::Menu(LMENU_HELP::IS.to_owned(), false);
+        let m_help_about = TMenu::MenuItem(LMENU_HELP::HAS[0].to_owned(), false, false);
+
+        bmb.add_menu(m_help)
+            .add_submenu_item(m_help_about)
             .build(&mut help_cnt, parent)
             .map_err(|e| eprintln!("{:?}",e)).unwrap();
 
@@ -244,4 +284,3 @@ impl App {
 
 
 }
-

@@ -25,6 +25,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fc7aa29613bd6a620df431842069224d8bc9011086b1db4c0e0cd47fa03ec9a"
 
 [[package]]
+name = "muldiv"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0419348c027fa7be448d2ae7ea0e4e04c2334c31dc4e74ab29f00a2a7ca69204"
+
+[[package]]
 name = "native-windows-gui"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -32,6 +38,7 @@ checksum = "fe8d44e6cea6bba40a302d1ab3ee50c6d9f9714ab94a776b0db0a5521c49c9ce"
 dependencies = [
  "bitflags",
  "lazy_static",
+ "muldiv",
  "stretch",
  "winapi",
  "winapi-build",
