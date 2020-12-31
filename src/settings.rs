@@ -2,8 +2,8 @@
 //! as other state that should persist between sessions
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
-use std::path::Path;
-use std::fmt;
+use std::{fmt,env};
+use std::path::{PathBuf};
 use serde::{Deserialize,Serialize};
 
 use crate::utils::geometry::Coord;
@@ -46,6 +46,12 @@ impl CAppSettings {
     pub const DEF_WINDOW_POS: Coord<i32> = Coord { x: 300, y: 300 };
     pub const DEF_WINDOW_DIMS: Coord<i32> = Coord { x: 400, y: 300 };
     pub const DEF_CFG_PATH: &'static str = "settings.json";
+
+    pub fn DEF_OPEN_FOLDER() -> String {
+        let mut p = PathBuf::from(env::var_os("USERPROFILE").unwrap());
+        p.push("Documents");
+        p.to_str().unwrap().to_owned()
+    }
 }
 
 /// Structure to store persistent UI state between sessions
@@ -57,6 +63,7 @@ pub struct AppSettings {
     pub window_dims: Coord<i32>,
     /// list of recently open file paths
     pub recent_files: Vec<String>,
+    pub last_seen_folder: String,
 }
 
 /// Implementation for AppSettings class
@@ -67,6 +74,7 @@ impl AppSettings {
             window_pos: CAppSettings::DEF_WINDOW_POS,
             window_dims: CAppSettings::DEF_WINDOW_DIMS,
             recent_files: vec![],
+            last_seen_folder: CAppSettings::DEF_OPEN_FOLDER(),
         }
     }
 
@@ -117,6 +125,7 @@ impl AppSettings {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     macro_rules! make_strvec {
         [ $($a:expr),+ ] => {
@@ -132,7 +141,8 @@ mod tests {
             recent_files: make_strvec![
                 "C:\\Temp\\data.csv",
                 "C:\\Users\\user\\Documents\\grades.csv"
-            ]
+            ],
+            last_seen_folder: "C:\\Users\\joe\\Documents".to_owned()
         };
 
         let r = serde_json::to_string(&settings).expect("serialization error");
@@ -154,7 +164,8 @@ mod tests {
                 "recent_files": [
                     "C:\\temp\\new_data.csv",
                     "X:\\bigdata.csv"
-                ]
+                ],
+                "last_seen_folder": "C:\\Users\\joe\\Documents"
             }"#;
 
         let expected = AppSettings {
@@ -163,7 +174,8 @@ mod tests {
             recent_files: make_strvec![
                 "C:\\temp\\new_data.csv",
                 "X:\\bigdata.csv"
-            ]
+            ],
+            last_seen_folder: "C:\\Users\\joe\\Documents".to_owned()
         };
 
         let r: AppSettings = serde_json::from_str(s)
@@ -178,6 +190,7 @@ mod tests {
             window_pos: CAppSettings::DEF_WINDOW_POS,
             window_dims: CAppSettings::DEF_WINDOW_DIMS,
             recent_files: vec![],
+            last_seen_folder: CAppSettings::DEF_OPEN_FOLDER.clone()
         };
 
         match AppSettings::load() {
@@ -191,6 +204,7 @@ mod tests {
             window_pos: Coord { x: 0, y: 2000 },
             window_dims: Coord { x: 1000, y: 1000 },
             recent_files: make_strvec![ "X:\\secrets.csv" ],
+            last_seen_folder: CAppSettings::DEF_OPEN_FOLDER()
         };
 
         let f = File::create(Path::new(CAppSettings::DEF_CFG_PATH))
@@ -228,7 +242,8 @@ mod tests {
         let expected = AppSettings {
             window_pos: Coord { x: 1234, y: 2200 },
             window_dims: Coord { x: 100, y: 150 },
-            recent_files: make_strvec![ "G:\\Path\\To\\Hidden\\Treasure.csv" ]
+            recent_files: make_strvec![ "G:\\Path\\To\\Hidden\\Treasure.csv" ],
+            last_seen_folder: CAppSettings::DEF_OPEN_FOLDER()
         };
 
         assert_eq!(r2, expected);

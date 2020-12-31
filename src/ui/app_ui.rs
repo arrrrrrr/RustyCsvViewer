@@ -14,6 +14,8 @@ impl nwg::NativeUi<AppUi> for App {
     fn build_ui(mut data: App) -> Result<AppUi, nwg::NwgError> {
         use nwg::Event as E;
 
+        nwg::enable_visual_styles();
+
         // Controls
         nwg::Window::builder()
             .flags(nwg::WindowFlags::MAIN_WINDOW |
@@ -23,16 +25,10 @@ impl nwg::NativeUi<AppUi> for App {
             .title(resource::APP_TITLE)
             .build(&mut data.window)?;
 
-        // Dialogs
-        nwg::FileDialog::builder()
-            .title(resource::APP_OPEN_FILE_DLG)
-            .action(nwg::FileDialogAction::Open)
-            .filters(resource::APP_OPEN_FILE_DLG_FILTER)
-            .build(&mut data.file_dialog)?;
-
-        // nwg::MenuItem::builder()
-        //     .parent(&data.window)
-        //     .build()?;
+        // Create the file picker dialog
+        App::create_file_picker_dialog(&mut data.file_dialog);
+        // Create the menubar and submenus
+        App::create_menus(&mut data.menu, &data.window);
 
         let ui = AppUi {
             inner: Rc::new(data),
@@ -42,13 +38,56 @@ impl nwg::NativeUi<AppUi> for App {
         let evt_ui = Rc::downgrade(&ui.inner);
 
         let handle_events = move |evt, _evt_data, handle| {
-            if let Some(ui) = evt_ui.upgrade() {
+            if let Some(mut ui) = evt_ui.upgrade() {
                 match evt {
                     E::OnWindowClose => {
                         if &handle == &ui.window {
-                            &ui.on_window_close();
+                            App::on_window_close(&ui);
                         }
                     },
+                    /// WM_COMMAND HANDLERS FOR MENU ITEMS GO HERE
+                    /// TODO: a lookup table of window handle and lambda to execute on message
+                    E::OnMenuItemSelected => {
+                        use crate::ui::resource::*;
+
+                        if let Some(h) = ui.find_submenu_handle(LMENU_FILE::IS, LMENU_FILE::HAS[0]) {
+                            if &handle == h {
+                                if let Some(f) = ui.cmd_open_file() {
+                                    println!("opened {}", f);
+                                }
+                            }
+                        }
+                        else if &handle ==
+                            ui.find_submenu_handle(LMENU_FILE::IS, LMENU_FILE::HAS[1]).unwrap()
+                        {
+                            // close a file!
+                            ui.cmd_close_file();
+                        }
+                        else if &handle ==
+                            ui.find_submenu_handle(LMENU_FILE::IS, LMENU_FILE::HAS[2]).unwrap()
+                        {
+                            // close a file!
+                            ui.cmd_exit();
+                        }
+                        else if &handle ==
+                            ui.find_submenu_handle(LMENU_EDIT::IS, LMENU_FILE::HAS[0]).unwrap()
+                        {
+                            // close a file!
+                            ui.cmd_find();
+                        }
+                        else if &handle ==
+                            ui.find_submenu_handle(LMENU_EDIT::IS, LMENU_FILE::HAS[1]).unwrap()
+                        {
+                            // close a file!
+                            unimplemented!()
+                        }
+                        else if &handle ==
+                            ui.find_submenu_handle(LMENU_HELP::IS, LMENU_FILE::HAS[0]).unwrap()
+                        {
+                            // close a file!
+                            ui.cmd_about();
+                        }
+                    }
                     _ => {}
                 }
             }

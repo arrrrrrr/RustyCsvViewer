@@ -88,7 +88,7 @@ pub enum CsvQuoteValidationError {
 
 impl fmt::Display for CsvQuoteValidationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *&self {
+        match *self {
             CsvQuoteValidationError::InvalidEscapeError =>
                 write!(f, "Unquoted field with escaped quote error"),
 
@@ -121,7 +121,7 @@ pub enum CsvValidationError {
 /// Display trait for displaying Validation error messages
 impl fmt::Display for CsvValidationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *&self {
+        match self {
             CsvValidationError::QuoteValidationError {
                 subtype, row, col, value } =>
                 {

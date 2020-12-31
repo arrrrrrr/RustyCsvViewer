@@ -1,18 +1,19 @@
 use std::path::{PathBuf};
+use std::collections::HashMap;
 
+use crate::ui::resource;
 use crate::settings::AppSettings;
-use crate::utils;
 use crate::csv::*;
+use crate::ui::menu::{CMenu};
 
 #[derive(Default)]
 pub struct App {
     pub window: nwg::Window,
     pub layout: nwg::GridLayout,
     pub file_dialog: nwg::FileDialog,
-    pub default_folder: String,
     pub layout_params: Option<LayoutParams>,
-    pub menu: nwg::Menu,
     pub state: AppSettings,
+    pub menu: HashMap<String, CMenu>,
 }
 
 pub struct LayoutParams {
@@ -26,11 +27,11 @@ impl App {
         App {
             state,
             // TODO: might fail if UCS2 sequence cannot be converted to UTF8
-            default_folder: utils::get_cwd_as_str(),
             ..Default::default()
         }
     }
 
+    /// On Event Handler Functions
     pub fn on_window_close(&self) {
         // TODO: this isn't ideal but its ok for now
         if let Err(e) =  self.state.save() {
@@ -51,53 +52,60 @@ impl App {
     **/
 
     // Execute the open file command
-    pub fn cmd_open_file(&mut self) {
-        // default folder might have changed? Not sure if this remembers the path
-        if let Err(e) = self.file_dialog.set_default_folder(&self.default_folder) {
-            nwg::error_message("Open File", &format!("{}",e));
+    pub fn cmd_open_file(&self) -> Option<String> {
+        let selected = self.open_file_picker_dialog(&self.file_dialog);
+
+        if selected.is_none() {
+            return None;
         }
 
-        let mut selected_file = String::new();
+        let selected = selected.unwrap();
+        eprintln!("Selected file: {}", selected);
 
-        // Run the file picker dialog and select a file
-        if self.file_dialog.run(Some(&self.window)) {
-            match self.file_dialog.get_selected_item() {
-                Ok(filepath) => {
-                    // update the default folder
-                    if let Some(p) = PathBuf::from(&filepath).parent() {
-                        self.default_folder = p.to_string_lossy().to_string();
-                    }
+        return Some(selected);
 
-                    selected_file.push_str(&filepath);
-                },
-                Err(e) => {
-                    let msg_ = format!("{}", e);
-                    nwg::error_message("Open File", &msg_);
-                    return;
-                }
-            }
-        }
-
-        eprintln!("Selected file: {}", selected_file);
-
-        if let Some(data) = self.read_file(&selected_file) {
-            let l = self.prepare_layout(data);
-            println!("{:?}", l.data)
-        }
-    }
-
-    // Execute the close file command
-    pub fn cmd_close_file(&mut self) {
-        unimplemented!()
-    }
-
-    pub fn cmd_exit() {
-        unimplemented!()
+        // TODO: Implement further
+        // if let Some(data) = self.read_file(&selected) {
+        //     let l = self.prepare_layout(data);
+        //     println!("{:?}", l.data)
+        // }
     }
 
     // Execute the about command
     pub fn cmd_about(&self) {
-        unimplemented!()
+        eprintln!("cmd_about: showing about dialog");
+    }
+
+    // Execute the close file command
+    pub fn cmd_close_file(&self) {
+        eprintln!("cmd_close_file: Closing open file");
+    }
+
+    pub fn cmd_exit(&self) {
+        eprintln!("cmd_exit: exiting");
+        self.on_window_close();
+    }
+
+    pub fn cmd_find(&self) {
+        eprintln!("cmd_find: showing find dialog");
+    }
+
+    fn open_file_picker_dialog(&self, dialog: &nwg::FileDialog) -> Option<String> {
+        let mut selected: Option<String> = None;
+
+        // Run the file picker dialog and select a file
+        if dialog.run(Some(&self.window)) {
+            selected = match dialog.get_selected_item() {
+                Ok(filepath) => Some(filepath),
+                Err(e) => {
+                    let msg_ = format!("{}", e);
+                    nwg::error_message("Open File", &msg_);
+                    None
+                }
+            }
+        }
+
+        selected
     }
 
     // Read the file contents into a CsvData structure or display a message box on error
@@ -141,6 +149,99 @@ impl App {
         //LayoutParams { data, col_widths: vec![], row_height: 1 }
         unimplemented!()
     }
+
+    pub fn find_submenu_handle(&self, parent: &str, child: &str) ->
+        Option<&nwg::ControlHandle>
+    {
+        if let Some(v) = self.menu.get(parent) {
+            if let Some(v_) = v.get_submenu(child) {
+                return Some(&v_.handle());
+            }
+            else {
+                // return the top level menu handle
+                return Some(&v.get_menu().handle());
+            }
+        }
+
+        None
+    }
+
+    /// create a file picker dialog for opening csv and text files
+    pub fn create_file_picker_dialog(dialog: &mut nwg::FileDialog) -> Result<(),nwg::NwgError> {
+        nwg::FileDialog::builder()
+            .title(resource::APP_OPEN_FILE_DLG)
+            .action(nwg::FileDialogAction::Open)
+            .filters(resource::APP_OPEN_FILE_DLG_FILTER)
+            .build(dialog)?;
+
+        Ok(())
+    }
+
+    pub fn create_menus<C: Into<nwg::ControlHandle> + Copy>(
+        menu: &mut HashMap<String, CMenu>,
+        parent: C)
+    {
+        use crate::ui::menu::{BulkMenuBuilder, TMenu, IMenu};
+        use crate::ui::resource::*;
+
+        let mut bmb = BulkMenuBuilder::new();
+
+        let mut submenu_vec =
+            (0..LMENU_FILE::HAS.len()).into_iter()
+                .map(|_|IMenu::from(nwg::MenuItem::default()))
+                .collect::<Vec<IMenu>>();
+
+        let mut file_cnt = CMenu::new(
+            IMenu::Menu(nwg::Menu::default()),
+            &mut Vec::from(resource::LMENU_FILE::HAS),
+            submenu_vec
+        );
+
+        bmb.add_menu(TMenu::Menu(LMENU_FILE::IS.to_owned(), false))
+            .add_submenu_item(TMenu::MenuItem(LMENU_FILE::HAS[0].to_owned(), false, false))
+            .add_submenu_item(TMenu::MenuItem(LMENU_FILE::HAS[1].to_owned(), true, false))
+            .add_submenu_item(TMenu::MenuItem(LMENU_FILE::HAS[2].to_owned(), false, false))
+            .build(&mut file_cnt, parent)
+            .map_err(|e| eprintln!("{:?}",e)).unwrap();
+
+        bmb = BulkMenuBuilder::new();
+        submenu_vec =
+            (0..LMENU_EDIT::HAS.len()).into_iter()
+                .map(|_| IMenu::from(nwg::MenuItem::default())).collect();
+
+        let mut edit_cnt = CMenu::new(
+            IMenu::from(nwg::Menu::default()),
+            &mut Vec::from(LMENU_EDIT::HAS),
+            submenu_vec
+        );
+
+        bmb.add_menu(TMenu::Menu(LMENU_EDIT::IS.to_owned(), false))
+            .add_submenu_item(TMenu::MenuItem(LMENU_EDIT::HAS[0].to_owned(), false, false))
+            .add_submenu_item(TMenu::MenuItem(LMENU_EDIT::HAS[1].to_owned(), true, false))
+            .build(&mut edit_cnt, parent)
+            .map_err(|e| eprintln!("{:?}",e)).unwrap();
+
+        bmb = BulkMenuBuilder::new();
+        submenu_vec =
+            (0..LMENU_HELP::HAS.len()).into_iter()
+                .map(|_| IMenu::from(nwg::MenuItem::default())).collect();
+
+        let mut help_cnt = CMenu::new(
+            IMenu::from(nwg::Menu::default()),
+            &mut Vec::from(LMENU_HELP::HAS),
+            submenu_vec
+        );
+
+        bmb.add_menu(TMenu::Menu(LMENU_HELP::IS.to_owned(), false))
+            .add_submenu_item(TMenu::MenuItem(LMENU_HELP::HAS[0].to_owned(), false, false))
+            .build(&mut help_cnt, parent)
+            .map_err(|e| eprintln!("{:?}",e)).unwrap();
+
+        menu.insert(resource::LMENU_FILE::IS.to_string(), file_cnt);
+        menu.insert(resource::LMENU_EDIT::IS.to_string(), edit_cnt);
+        menu.insert(resource::LMENU_HELP::IS.to_string(), help_cnt);
+    }
+
 
 }
 
