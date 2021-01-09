@@ -1,9 +1,9 @@
-use crate::csv::CsvData;
+use crate::table::TableData;
 
 /// Class for holding a grid layout of the data
 struct DataLayout {
     layout: nwg::GridLayout,
-    data: CsvData,
+    data: TableData,
 }
 
 impl DataLayout {

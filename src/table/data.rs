@@ -1,18 +1,18 @@
-pub mod reader;
-
-use std::fmt;
 use std::cmp;
+use std::error;
+use std::fmt::{Display, Formatter};
+use std::fmt::Result as FmtResult;
 
 #[derive(Debug)]
-pub struct CsvData {
-    header: Vec<String>,
-    data: Vec<String>,
-    dims: (usize, usize),
+pub struct TableData {
+    pub header: Vec<String>,
+    pub data: Vec<String>,
+    pub dims: (usize, usize),
 }
 
-impl CsvData {
+impl TableData {
     pub fn new() -> Self {
-        CsvData {
+        TableData {
             header: Vec::new(),
             data: Vec::new(),
             dims: (0, 0),
@@ -34,7 +34,7 @@ impl CsvData {
             return;
         }
 
-        panic!("CsvData: column mismatch when attempting to update the header field")
+        panic!("TableData: column mismatch when attempting to update the header field")
     }
 
     pub fn set_data(&mut self, data: &mut Vec<String>, cols: usize) {
@@ -45,7 +45,7 @@ impl CsvData {
             return;
         }
 
-        panic!("CsvData: column mismatch when attempting to update the data field")
+        panic!("TableData: column mismatch when attempting to update the data field")
     }
 
     pub fn has_headers(&self) -> bool {
@@ -68,11 +68,11 @@ impl CsvData {
         self.dims.1
     }
 
-    pub fn get_headers(&self) -> &Vec<String> {
+    pub fn header(&self) -> &Vec<String> {
         &self.header
     }
 
-    pub fn get_data(&self) -> &Vec<String> {
+    pub fn data(&self) -> &Vec<String> {
         &self.data
     }
 }
@@ -80,22 +80,22 @@ impl CsvData {
 /// Csv validation error sub-types
 /// InvalidEscapeError
 #[derive(Debug,PartialEq)]
-pub enum CsvQuoteValidationError {
+pub enum QuoteValidationError {
     InvalidEscapeError,
     InvalidQuoteError,
     UnterminatedQuoteError,
 }
 
-impl fmt::Display for CsvQuoteValidationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Display for QuoteValidationError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match *self {
-            CsvQuoteValidationError::InvalidEscapeError =>
+            QuoteValidationError::InvalidEscapeError =>
                 write!(f, "Unquoted field with escaped quote error"),
 
-            CsvQuoteValidationError::InvalidQuoteError =>
+            QuoteValidationError::InvalidQuoteError =>
                 write!(f, "Unbalanced quote error"),
 
-            CsvQuoteValidationError::UnterminatedQuoteError =>
+            QuoteValidationError::UnterminatedQuoteError =>
                 write!(f, "Unterminated outer quote error"),
         }
     }
@@ -103,9 +103,9 @@ impl fmt::Display for CsvQuoteValidationError {
 
 /// Primary csv validation error types
 #[derive(Debug,PartialEq)]
-pub enum CsvValidationError {
+pub enum TableDataValidationError {
     QuoteValidationError {
-        subtype: CsvQuoteValidationError,
+        subtype: QuoteValidationError,
         row: i32,
         col: i32,
         value: String
@@ -118,11 +118,12 @@ pub enum CsvValidationError {
     },
 }
 
+
 /// Display trait for displaying Validation error messages
-impl fmt::Display for CsvValidationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Display for TableDataValidationError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            CsvValidationError::QuoteValidationError {
+            TableDataValidationError::QuoteValidationError {
                 subtype, row, col, value } =>
                 {
                     let max_value_len = cmp::min(64, value.len());
@@ -130,7 +131,7 @@ impl fmt::Display for CsvValidationError {
                            row, subtype, col, &value[0..max_value_len])
                 }
 
-            CsvValidationError::RowFieldCountMismatchError {
+            TableDataValidationError::RowFieldCountMismatchError {
                 row, expected, found } =>
                 write!(f, "At row {}. Field count mismatch. Expected: {}, Found: {}",
                        row, expected, found),
@@ -138,9 +139,11 @@ impl fmt::Display for CsvValidationError {
     }
 }
 
+impl error::Error for TableDataValidationError {}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::table::*;
 
     macro_rules! make_strvec {
         [ $($a:expr),+ ] => {
@@ -149,9 +152,9 @@ mod tests {
     }
 
     #[test]
-    fn test_csv_data_header_only() {
+    fn test_table_data_header_only() {
         let mut hdr = make_strvec![ "Name", "Type", "Value" ];
-        let mut c = CsvData::new();
+        let mut c = TableData::new();
         c.set_header(&mut hdr);
 
         assert_eq!(c.columns(), 3);
@@ -162,9 +165,9 @@ mod tests {
     }
 
     #[test]
-    fn test_csv_data_data_only() {
+    fn test_table_data_data_only() {
         let mut data = make_strvec![ "Name", "Type", "Value" ];
-        let mut c = CsvData::new();
+        let mut c = TableData::new();
         c.set_data(&mut data, 3);
 
         assert_eq!(c.columns(), 3);
@@ -175,10 +178,10 @@ mod tests {
     }
 
     #[test]
-    fn test_csv_data_header_and_data() {
+    fn test_table_data_header_and_data() {
         let mut hdr = make_strvec![ "Name", "Type", "Value" ];
         let mut data = make_strvec![ "a", "b", "c" ];
-        let mut c = CsvData::new();
+        let mut c = TableData::new();
 
         c.set_header(&mut hdr);
         c.set_data(&mut data, 3);

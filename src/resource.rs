@@ -2,8 +2,8 @@ macro_rules! menu_label_const {
     (
         [ $a:literal | $b:literal $(,$c:literal)* ] @ $count:expr
     ) => {
-            pub const IS: &'static str = $a;
-            pub const HAS: [&'static str; $count] = [ $b $(,$c)* ];
+            pub const NAME: &'static str = $a;
+            pub const CHILD: [&'static str; $count] = [ $b $(,$c)* ];
     };
 }
 
@@ -29,5 +29,3 @@ pub struct LMENU_HELP {}
 impl LMENU_HELP {
     menu_label_const![ ["&Help" | "&About"] @1 ];
 }
-
-

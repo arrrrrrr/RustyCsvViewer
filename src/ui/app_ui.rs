@@ -1,94 +1,62 @@
-use crate::ui::app::App;
-use crate::ui::resource;
-
-use std::rc::Rc;
 use std::cell::RefCell;
 use std::ops::Deref;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
+
+use crate::{NativeUiEx};
+use crate::ui::{App,AppState,ComponentParams};
 
 pub struct AppUi {
-    inner: Rc<App>,
+    inner: Rc<RefCell<App>>,
+    state: Arc<Mutex<AppState>>,
     default_handler: RefCell<Option<nwg::EventHandler>>,
+    control_handlers: RefCell<Vec<nwg::EventHandler>>,
 }
 
-impl nwg::NativeUi<AppUi> for App {
-    fn build_ui(mut data: App) -> Result<AppUi, nwg::NwgError> {
+impl NativeUiEx<AppUi, Arc<Mutex<AppState>>> for App {
+    fn build_ui(mut data: App, state: Arc<Mutex<AppState>>) -> Result<AppUi, nwg::NwgError> {
         use nwg::Event as E;
 
-        nwg::enable_visual_styles();
-
-        // Controls
-        nwg::Window::builder()
-            .flags(nwg::WindowFlags::MAIN_WINDOW |
-                   nwg::WindowFlags::VISIBLE)
-            .size((data.state.window_dims.x, data.state.window_dims.y))
-            .position((data.state.window_pos.x, data.state.window_pos.y))
-            .title(resource::APP_TITLE)
-            .build(&mut data.window)?;
-
-        // Create the file picker dialog
-        App::create_file_picker_dialog(&mut data.file_dialog);
-        // Create the menubar and submenus
-        App::create_menus(&mut data.menu, &data.window);
-
         let ui = AppUi {
-            inner: Rc::new(data),
+            inner: Rc::new(RefCell::new(data)),
+            state: Arc::clone(&state),
             default_handler: Default::default(),
+            control_handlers: Default::default(),
         };
 
-        let evt_ui = Rc::downgrade(&ui.inner);
+        // Create the main window
+        App::create_main_window(Rc::clone(&ui.inner), Arc::clone(&state))?;
+        // Create the file picker dialog
+        App::create_file_picker_dialog(Rc::clone(&ui.inner))?;
+        // Create the menubar and submenus
+        App::create_menus(Rc::clone(&ui.inner))?;
 
-        let handle_events = move |evt, _evt_data, handle| {
-            if let Some(mut ui) = evt_ui.upgrade() {
-                match evt {
-                    E::OnWindowClose => {
-                        if &handle == &ui.window {
-                            App::on_window_close(&ui);
-                        }
-                    },
-                    /// WM_COMMAND HANDLERS FOR MENU ITEMS GO HERE
-                    /// TODO: a lookup table of window handle and lambda to execute on message
-                    E::OnMenuItemSelected => {
-                        use crate::ui::resource::*;
+        let evt_ui = Rc::downgrade(&Rc::clone(&ui.inner));
+        let evt_state = Arc::downgrade(&Arc::clone(&ui.state));
 
-                        if let Some(h) = ui.find_submenu_handle(LMENU_FILE::IS, LMENU_FILE::HAS[0]) {
-                            if &handle == h {
-                                if let Some(f) = ui.cmd_open_file(&evt, &_evt_data) {
-                                    println!("opened {}", f);
-                                }
+        let handle_events = move |evt, evt_data, handle| {
+            if let Some(ui) = evt_ui.upgrade() {
+                if let Some(state) = evt_state.upgrade() {
+                    match evt {
+                        E::OnWindowClose => {
+                            if &handle == &ui.borrow().window.handle {
+                                App::exit(&ui.borrow(), &mut state.lock().unwrap());
+                            }
+                        },
+                        E::OnMenuItemSelected => {
+                            // Search the menu tree and return the menu item that matches the handle
+                            if let Some(menu) = App::find_menu_by_handle(&ui.borrow().menu, &handle) {
+                                // Build the parameters for the command to be executed
+                                let params =
+                                    ComponentParams::new(Rc::clone(&ui), Arc::clone(&state),
+                                                         evt, evt_data);
+                                // Execute the command
+                                menu.run(params)
+                                    .map_err(|e| nwg::error_message(menu.name(), &format!("{:?}", e)));
                             }
                         }
-                        else if &handle ==
-                            ui.find_submenu_handle(LMENU_FILE::IS, LMENU_FILE::HAS[1]).unwrap()
-                        {
-                            // close a file!
-                            ui.cmd_close_file(&evt, &_evt_data);
-                        }
-                        else if &handle ==
-                            ui.find_submenu_handle(LMENU_FILE::IS, LMENU_FILE::HAS[2]).unwrap()
-                        {
-                            // close a file!
-                            ui.cmd_exit(&evt, &_evt_data);
-                        }
-                        else if &handle ==
-                            ui.find_submenu_handle(LMENU_EDIT::IS, LMENU_FILE::HAS[0]).unwrap()
-                        {
-                            // close a file!
-                            ui.cmd_find(&evt, &_evt_data);
-                        }
-                        else if &handle ==
-                            ui.find_submenu_handle(LMENU_EDIT::IS, LMENU_FILE::HAS[1]).unwrap()
-                        {
-                            // close a file!
-                            unimplemented!()
-                        }
-                        else if &handle ==
-                            ui.find_submenu_handle(LMENU_HELP::IS, LMENU_FILE::HAS[0]).unwrap()
-                        {
-                            // close a file!
-                            ui.cmd_about(&evt, &_evt_data);
-                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
             }
         };
@@ -107,6 +75,11 @@ impl Drop for AppUi {
         if handler.is_some() {
             nwg::unbind_event_handler(handler.as_ref().unwrap());
         }
+
+        // Unbind any event handlers for common controls
+        for h in self.control_handlers.borrow().iter() {
+            nwg::unbind_event_handler(h);
+        }
     }
 }
 
@@ -114,6 +87,8 @@ impl Deref for AppUi {
     type Target = App;
 
     fn deref(&self) -> &App {
-        &self.inner
+        unsafe {
+            &self.inner.as_ptr().as_ref().unwrap()
+        }
     }
 }
