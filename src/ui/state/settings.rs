@@ -132,7 +132,7 @@ mod tests {
                     "C:\\temp\\new_data.csv",
                     "X:\\bigdata.csv"
                 ],
-                "max_recent_files": "10"
+                "max_recent_files": 10
             }"#;
 
         let expected = Settings {
