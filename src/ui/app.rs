@@ -271,13 +271,19 @@ impl App {
         Ok(())
     }
 
-    pub fn find_menu_by_handle<'a>(root: &'a Vec<Box<dyn Component + 'static>>, handle: &nwg::ControlHandle) -> Option<&'a Box<dyn Component + 'static>> {
+    pub fn find_menu_by_handle<'a>(root: &'a Vec<Box<dyn Component + 'static>>, handle: &nwg::ControlHandle) ->
+        Option<&'a Box<dyn Component + 'static>>
+    {
         // Iterate recursively through the menus to locate the handle
         for menu in root.iter() {
-            match menu.children() {
-                Some(children) => return App::find_menu_by_handle(children, handle),
-                None if &menu.handle() == &handle => return Some(menu),
-                _ => ()
+            if &menu.handle() == &handle {
+                return Some(menu);
+            }
+
+            if let Some(children) = menu.children() {
+                if let Some(res) = App::find_menu_by_handle(children, &handle) {
+                    return Some(res);
+                }
             }
         }
 
