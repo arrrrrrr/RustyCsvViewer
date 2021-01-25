@@ -1,0 +1,18 @@
+[package]
+name = "winui-lib"
+version = "0.0.1"
+authors = ["Michael Z <i.am.the.ar@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies.winapi]
+version = "0.3"
+features = [
+    "windef","winbase","wingdi","winuser","ntdef", # windows.h
+    "libloaderapi","winerror","stringapiset", # misc
+    "combaseapi","objbase", # com interaction
+    "d2d1","d2d1_1","d2d1_2","d2d1_3", # direct2d
+    "dwrite","dwrite_1","dwrite_2","dwrite_3", # directwrite
+    "wincodec"
+]

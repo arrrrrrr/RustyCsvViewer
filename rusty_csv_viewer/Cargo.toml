@@ -1,0 +1,26 @@
+[package]
+name = "rusty_csv_viewer"
+version = "0.1.0"
+authors = ["Michael Zammit <mzam7159@uni.sydney.edu.au>"]
+description = "A table viewer for textual data in Rust"
+edition = "2018"
+
+[lib]
+name = "rcv"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rusty_csv_viewer"
+path = "src/main.rs"
+
+[dependencies.serde_json]
+version = "^1.0"
+
+[dependencies.serde]
+version = "^1.0"
+features = ["derive"]
+
+[dependencies]
+nwg = { version = "^1.0.7", package = "native-windows-gui", features = ["default"] }
+
+winui-lib = { path = "../winui-lib" }
